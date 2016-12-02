@@ -1,0 +1,266 @@
+#include <stdio.h>
+#include <conio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+
+#include<winsock2.h>			//Bibliotèque resaux
+#pragma comment(lib,"ws2_32.lib")
+
+#include "..\include\SDL.h"		//Bibliotèque SDL (Affichage)
+#include "..\include\SDL_ttf.h"	//Bibliotèque SDL (Affichage_texte)
+
+#include "..\Entete\Base.h"		//Sous fonctions
+#include "..\Entete\Affichage.h"
+#include "..\Entete\Cartes.h"
+#include "..\Entete\jeu.h"
+
+
+struct Reseau
+{
+	int Port;
+	char* Ip;
+	SOCKET sock_attente;
+	SOCKET sock_Player;
+	SOCKADDR_IN sin;
+};
+
+bool jeu(struct Reseau* reseau,struct Element_Affiche Liste_Elements[],SDL_Surface* Ecran)
+{
+	///////////////////////////////////////////////////////////////////////////
+	//Initialisation des cartes
+	struct Cartes Liste_Carte[NB_Cartes];
+	Remplir_Carte(Liste_Carte);
+
+	printf("%d\n",Liste_Carte[0].Vie);
+	printf("%d\n",Liste_Carte[0].Attaque);
+	///////////////////////////////////////////////////////////////////////////
+
+	////////////////////////////
+	//struct Infos_client Infos;
+	////////////////////////////
+
+
+	///////////////////////////////////////////////////////////////////////////
+	//Initialisation des variable d'environement
+	SDL_Event event;			//init event
+	srand((time(NULL)));		//init random
+	int i,j,z,z1,X,Y,Pioche_nb;
+
+	bool Close=false, Mon_tour=true, Select_Mon_Jeu=false, Select_Placement=false, Pioche=true;
+	bool Zone1[6];
+	int Zone2[6],Zone3[8][3],Zone4[6][3];
+
+	//vb test du player 2
+	int cartes_p2=2;
+	
+	//Initatisation des zones 3 et 4
+	for(i=0,z=EA_Zone4;i<6;i++)
+	{
+		Zone3[i][0]=Zone4[i][0]=1;	//cartes qui l'occupe (carte vide)
+		Zone3[i][1]=Zone4[i][1]=0;	//selectionée ?? (mis à 0)
+		Zone3[i][2]=Zone4[i][2]=0;	//Occupée (mis à 0)
+		Parametrage_Image_Elements_Affichage (Liste_Elements,z-(EA_Zone4-EA_Zone3),Liste_Carte[Zone3[i][0]].Image_de_la_Carte);	//mise de la carte vièrege à la place de la precedente Zone 3
+		Parametrage_Image_Elements_Affichage (Liste_Elements,z,Liste_Carte[Zone4[i][0]].Image_de_la_Carte);						//mise de la carte vièrege à la place de la precedente Zone 4
+		z++;
+	}
+	///////////////////////////////////////////////////////////////////////////
+
+	///////////////////////////////////////////////////////////////////////////
+	//Demarrage du jeu
+	while(Close==false)
+	{
+		//demarage de son tour
+		if(Mon_tour==true)
+		{
+			//pioche si le tour vien de commancer
+			if(Pioche==true)
+			{
+				for(i=0;i<6;i++)
+				{
+					printf("-- %d\n",Zone4[i][2]);
+				}
+				for(i=0,Pioche_nb=0,z=EA_Zone4;i<6;i++)
+				{
+					if(Zone4[i][2]==0 && Pioche_nb<2)
+					{
+						Zone4[i][0]=(rand()%6)+2;
+						Zone4[i][2]=1;
+						Parametrage_Image_Elements_Affichage (Liste_Elements,z,Liste_Carte[Zone4[i][0]].Image_de_la_Carte);
+						Pioche_nb++;
+					}
+					z++;
+				}
+				Pioche=false;
+			}
+			// fin pioche
+
+			//test interface sourie
+			SDL_PollEvent(&event);
+			switch(event.type)
+			{
+			case SDL_QUIT:			//quitter le programme croix
+				Close=true;
+				break;
+
+			case SDL_MOUSEMOTION:	//faire resortir le bontont si on passe sa souri dessus
+				//Bouton "Tour Suivant"
+				if(event.motion.x>1291 && event.motion.x<1396 && event.motion.y>382 && event.motion.y<418)
+				{
+					Parametrage_Transparence_Elements_Affichage (Liste_Elements,9,150);
+				}
+				else
+				{
+					Parametrage_Transparence_Elements_Affichage (Liste_Elements,9,255);
+				}
+				//Carte presente sur le plateau
+				j=15;		//init ligne
+				z=EA_Zone1;	//init case d'affichage
+				while(j<626)
+				{
+					for(i=327;i<968;i=i+128)
+					{
+						if(event.motion.x>i && event.motion.x<i+110 && event.motion.y>j && event.motion.y<j+160)
+						{
+							Parametrage_Transparence_Elements_Affichage (Liste_Elements,z,200);
+						}
+						else
+						{
+							Parametrage_Transparence_Elements_Affichage (Liste_Elements,z,255);
+						}
+						z++;
+					}
+
+					if(j==215)	{j=425;		}
+					else		{j=j+200;	}
+				}
+				break;
+
+			case SDL_MOUSEBUTTONDOWN:	//Action à effectuer en fonction du bouton
+				//Bouton "Tour Suivant"
+				if(event.motion.x>1291 && event.motion.x<1396 && event.motion.y>382 && event.motion.y<418)
+				{
+					Parametrage_Transparence_Elements_Affichage (Liste_Elements,9,255);
+					Mon_tour=false;
+				}
+				//Carte presente sur le plateau en zone 3
+				for(i=327,j=425,z=EA_Zone3;i<968;i=i+128)
+				{
+					if(event.motion.x>i && event.motion.x<i+110 && event.motion.y>j && event.motion.y<j+160)
+					{
+						if(Select_Placement==false)
+						{
+							X=Recuperation_X (Liste_Elements,z);
+							Y=Recuperation_Y (Liste_Elements,z);
+							Parametrage_X_Y_Elements_Affichage (Liste_Elements,34,X,Y);
+							Select_Placement=true;
+							Zone3[z-EA_Zone3][1]=1;
+							Sleep(40);
+							printf("case %d\n",z);
+							printf("z3 case %d\n",z-EA_Zone3);
+						}
+						else
+						{
+							Select_Placement=false;
+							Zone3[z-EA_Zone3][1]=0;
+							Sleep(40);
+						}
+					}
+					z++;
+				}
+				//Carte presente sur le plateau en zone 4
+				for(i=327,j=625,z=EA_Zone4;i<968;i=i+128)
+				{
+					if(event.motion.x>i && event.motion.x<i+110 && event.motion.y>j && event.motion.y<j+160)
+					{
+						if(Select_Mon_Jeu==false)
+						{
+							X=Recuperation_X (Liste_Elements,z);
+							Y=Recuperation_Y (Liste_Elements,z);
+							Parametrage_X_Y_Elements_Affichage (Liste_Elements,35,X,Y);
+							Select_Mon_Jeu=true;
+							Zone4[z-EA_Zone4][1]=1;
+							Sleep(40);
+							printf("case %d\n",z);
+							printf("z4 case %d\n",z-EA_Zone4);
+						}
+						else
+						{
+							Select_Mon_Jeu=false;
+							Zone4[z-EA_Zone4][1]=0;
+							Sleep(40);
+						}
+					}
+					z++;
+				}
+				
+				break;
+			}
+		}
+
+		//demarage du tour du jouer suivant
+		else
+		{
+			for(i=0,z=EA_Zone1;i<6;i++)
+			{
+				Parametrage_Image_Elements_Affichage (Liste_Elements,z,"Images/Cartes/Vide.bmp");
+				z++;
+			}
+			for(i=0,z=EA_Zone1;i<cartes_p2;i++)
+			{
+				Parametrage_Image_Elements_Affichage (Liste_Elements,z,"Images/Cartes/Dos.bmp");
+				z++;
+			}
+			Mon_tour=true;
+			Pioche=true;
+		}
+		
+		//actions à effectuer
+		if(Select_Mon_Jeu==true && Select_Placement==true)
+		{
+			
+			for(j=0,z1=EA_Zone3;j<6;j++)//a placer se 8
+			{
+				for(i=0,z=EA_Zone4;i<6;i++)
+				{
+					if(Zone4[i][1]==1 && Zone3[j][1]==1 && Zone3[j][2]==0 && Zone4[i][0]>1)
+					{
+						Parametrage_Image_Elements_Affichage (Liste_Elements,z1,Liste_Carte[Zone4[i][0]].Image_de_la_Carte);
+						Parametrage_Image_Elements_Affichage (Liste_Elements,z,"Images/Cartes/Vide.bmp");
+						Select_Mon_Jeu=Select_Placement=false;
+						Zone4[i][0]=Zone3[j][2]=1;
+						Zone4[i][1]=Zone3[j][1]=0;
+						Zone4[i][2]=0;
+						printf("i=%d	j=%d	z=%d	z1=%d\n",i,j,z,z1);
+					}
+					z++;
+				}
+				z1++;
+			}
+		}
+
+		//affichage d'element spéciaux
+		if(Select_Mon_Jeu==true)
+		{
+			Parametrage_Image_Elements_Affichage (Liste_Elements,35,"Images/Cartes/Cadre.bmp");
+		}
+		else
+		{
+			Parametrage_Image_Elements_Affichage (Liste_Elements,35,"Images/Cartes/Vide.bmp");
+		}
+		if(Select_Placement==true)
+		{
+			Parametrage_Image_Elements_Affichage (Liste_Elements,34,"Images/Cartes/Cadre.bmp");
+		}
+		else
+		{
+			Parametrage_Image_Elements_Affichage (Liste_Elements,34,"Images/Cartes/Vide.bmp");
+		}
+		Affichage1 (Liste_Elements,Ecran);
+		Sleep(10);
+	}
+	///////////////////////////////////////////////////////////////////////////
+	//fin du jeu
+	return Close;
+}
